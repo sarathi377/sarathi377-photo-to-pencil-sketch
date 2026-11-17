@@ -21,7 +21,7 @@ Open Command Prompt or PowerShell in this project folder (`photo-to-pencil-sketc
 ```bat
 python -m venv venv
 venv\Scripts\activate
-pip install -r requirement.txt
+pip install -r requirements.txt
 python app.py
 ```
 
