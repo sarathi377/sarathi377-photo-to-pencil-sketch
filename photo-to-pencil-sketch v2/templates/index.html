@@ -1,0 +1,260 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1.0">
+
+    <title>Live Pencil Sketch AI</title>
+
+    <link rel="stylesheet"
+          href="/static/style.css">
+</head>
+
+<body>
+
+    <header>
+        <h1>✏️ Live Pencil Sketch</h1>
+        <p>Turn your webcam into a real-time pencil drawing</p>
+    </header>
+
+    <main>
+
+        <div class="camera-grid">
+
+            <section class="panel">
+                <h2>Live Camera</h2>
+
+                <video id="video"
+                       autoplay
+                       playsinline></video>
+
+                <canvas id="canvas"
+                        width="640"
+                        height="480"
+                        hidden></canvas>
+
+                <p id="cameraStatus">Camera is off</p>
+            </section>
+
+            <section class="panel">
+                <h2>Pencil Sketch</h2>
+
+                <img id="sketch"
+                     alt="Your live pencil sketch will appear here">
+
+                <p id="sketchStatus">Waiting for camera...</p>
+            </section>
+
+        </div>
+
+        <div class="controls">
+
+            <button id="startBtn">
+                ▶ Start Camera
+            </button>
+
+            <button id="stopBtn" disabled>
+                ■ Stop Camera
+            </button>
+
+            <button id="downloadBtn" disabled>
+                ↓ Download Sketch
+            </button>
+
+        </div>
+
+        <p class="footer">
+            Powered by Python, Flask and OpenCV
+        </p>
+        <footer class="copyright">
+    © 2026 Keerthasarathi. All Rights Reserved.
+    <br>
+    Designed & Developed by Keerthasarathi G K
+</footer>
+
+    </main>
+
+<script>
+
+const video = document.getElementById("video");
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
+
+const sketch = document.getElementById("sketch");
+
+const startBtn = document.getElementById("startBtn");
+const stopBtn = document.getElementById("stopBtn");
+const downloadBtn = document.getElementById("downloadBtn");
+
+const cameraStatus = document.getElementById("cameraStatus");
+const sketchStatus = document.getElementById("sketchStatus");
+
+let stream = null;
+let running = false;
+let busy = false;
+let lastSketchURL = null;
+
+
+// Start webcam
+async function startCamera() {
+
+    try {
+
+        stream = await navigator.mediaDevices.getUserMedia({
+            video: {
+                width: { ideal: 640 },
+                height: { ideal: 480 }
+            },
+            audio: false
+        });
+
+        video.srcObject = stream;
+
+        await video.play();
+
+        running = true;
+
+        startBtn.disabled = true;
+        stopBtn.disabled = false;
+
+        cameraStatus.innerText = "🟢 Camera running";
+        sketchStatus.innerText = "Processing live frames...";
+
+        processFrames();
+
+    } catch (error) {
+
+        cameraStatus.innerText =
+            "Camera error: " + error.message;
+
+        alert("Please allow camera permission.");
+
+    }
+
+}
+
+
+// Send frames to Python backend
+async function processFrames() {
+
+    if (!running) return;
+
+    if (!busy && video.videoWidth > 0) {
+
+        busy = true;
+
+        try {
+
+            ctx.drawImage(
+                video,
+                0, 0,
+                canvas.width,
+                canvas.height
+            );
+
+            const blob = await new Promise(resolve => {
+                canvas.toBlob(resolve, "image/jpeg", 0.75);
+            });
+
+            if (!blob) throw new Error("Frame capture failed");
+
+            const response = await fetch("/sketch", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "image/jpeg"
+                },
+                body: blob
+            });
+
+            if (!response.ok) {
+                throw new Error("Server processing failed");
+            }
+
+            const result = await response.blob();
+
+            if (running) {
+
+                const newURL = URL.createObjectURL(result);
+
+                sketch.src = newURL;
+
+                if (lastSketchURL) {
+                    URL.revokeObjectURL(lastSketchURL);
+                }
+
+                lastSketchURL = newURL;
+
+                downloadBtn.disabled = false;
+
+                sketchStatus.innerText =
+                    "🟢 Live sketch active";
+
+            }
+
+        } catch (error) {
+
+            sketchStatus.innerText = error.message;
+
+        } finally {
+
+            busy = false;
+
+        }
+
+    }
+
+    if (running) {
+        setTimeout(processFrames, 100);
+    }
+
+}
+
+
+// Stop camera
+function stopCamera() {
+
+    running = false;
+
+    if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+        stream = null;
+    }
+
+    video.srcObject = null;
+
+    startBtn.disabled = false;
+    stopBtn.disabled = true;
+
+    cameraStatus.innerText = "Camera stopped";
+    sketchStatus.innerText = "Camera is not running";
+
+}
+
+
+// Download sketch
+function downloadSketch() {
+
+    if (!lastSketchURL) return;
+
+    const link = document.createElement("a");
+
+    link.href = lastSketchURL;
+    link.download = "live-pencil-sketch.jpg";
+
+    link.click();
+
+}
+
+
+startBtn.addEventListener("click", startCamera);
+stopBtn.addEventListener("click", stopCamera);
+downloadBtn.addEventListener("click", downloadSketch);
+
+window.addEventListener("beforeunload", stopCamera);
+
+</script>
+
+</body>
+</html>
